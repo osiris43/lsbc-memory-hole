@@ -1,0 +1,5 @@
+archive.db
+archive.db.bak
+.venv/
+__pycache__/
+*.pyc

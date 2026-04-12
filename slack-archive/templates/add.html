@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Add Entry — Slack Archive{% endblock %}
+
+{% block content %}
+<div class="max-w-xl mx-auto">
+  <h1 class="text-xl font-semibold mb-6">Add Entry</h1>
+
+  {% if error %}
+    <div class="mb-4 bg-red-900/50 border border-red-700 text-red-300 text-sm px-4 py-3 rounded-md">
+      {{ error }}
+    </div>
+  {% endif %}
+
+  <form method="post" action="/add" class="flex flex-col gap-4">
+
+    <div>
+      <label class="block text-sm text-gray-400 mb-1" for="title">Title <span class="text-red-400">*</span></label>
+      <input
+        id="title" name="title" type="text" required
+        value="{{ form.get('title', '') }}"
+        class="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        placeholder="Article title, topic, or description"
+      />
+    </div>
+
+    <div>
+      <label class="block text-sm text-gray-400 mb-1" for="url">URL</label>
+      <input
+        id="url" name="url" type="url"
+        value="{{ form.get('url', '') }}"
+        class="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        placeholder="https://…"
+      />
+    </div>
+
+    <div>
+      <label class="block text-sm text-gray-400 mb-1" for="category">Category</label>
+      <input
+        id="category" name="category" type="text"
+        list="category-options"
+        value="{{ form.get('category', '') }}"
+        class="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        placeholder="AI, Food, Trolling, …"
+      />
+      <datalist id="category-options">
+        {% for cat in categories %}
+          <option value="{{ cat }}">
+        {% endfor %}
+      </datalist>
+    </div>
+
+    <div>
+      <label class="block text-sm text-gray-400 mb-1" for="source">Source / Channel</label>
+      <input
+        id="source" name="source" type="text"
+        value="{{ form.get('source', '') }}"
+        class="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        placeholder="#general, @username, …"
+      />
+    </div>
+
+    <div>
+      <label class="block text-sm text-gray-400 mb-1" for="content_date">Content date</label>
+      <input
+        id="content_date" name="content_date" type="date"
+        value="{{ form.get('content_date', '') }}"
+        class="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+      />
+    </div>
+
+    <div>
+      <label class="block text-sm text-gray-400 mb-1" for="notes">Notes</label>
+      <textarea
+        id="notes" name="notes" rows="4"
+        class="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y"
+        placeholder="Any extra context, quotes, thoughts…"
+      >{{ form.get('notes', '') }}</textarea>
+    </div>
+
+    <div class="flex gap-3 pt-2">
+      <button type="submit"
+              class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium px-5 py-2 rounded-md transition-colors">
+        Save entry
+      </button>
+      <a href="/"
+         class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm px-5 py-2 rounded-md transition-colors">
+        Cancel
+      </a>
+    </div>
+
+  </form>
+</div>
+{% endblock %}
