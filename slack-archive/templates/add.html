@@ -69,6 +69,17 @@
     </div>
 
     <div>
+      <label class="block text-sm text-gray-400 mb-1" for="tags">Tags</label>
+      <input
+        id="tags" name="tags" type="text"
+        value="{{ form.get('tags', '') }}"
+        class="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm text-gray-100 font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        placeholder="#ai #food #funny"
+      />
+      <p class="mt-1 text-xs text-gray-600">Space or comma separated. # is optional.</p>
+    </div>
+
+    <div>
       <label class="block text-sm text-gray-400 mb-1" for="notes">Notes</label>
       <textarea
         id="notes" name="notes" rows="4"

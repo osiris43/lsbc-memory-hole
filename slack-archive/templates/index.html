@@ -29,7 +29,7 @@
 
 {# ── Category pills ── #}
 {% if categories %}
-<div class="flex flex-wrap gap-2 mb-6">
+<div class="flex flex-wrap gap-2 mb-3">
   <a href="/?{% if q %}q={{ q }}{% endif %}"
      class="px-3 py-1 rounded-full text-xs font-medium transition-colors
             {% if not active_cat %}bg-indigo-600 text-white{% else %}bg-gray-800 text-gray-400 hover:bg-gray-700{% endif %}">
@@ -42,6 +42,25 @@
       {{ cat }}
     </a>
   {% endfor %}
+</div>
+{% endif %}
+
+{# ── Tag cloud ── #}
+{% if all_tags %}
+<div class="flex flex-wrap gap-1.5 mb-6">
+  {% for t in all_tags %}
+    <a href="/?tag={{ t | urlencode }}{% if q %}&q={{ q }}{% endif %}{% if active_cat %}&cat={{ active_cat | urlencode }}{% endif %}"
+       class="px-2 py-0.5 rounded text-xs font-mono transition-colors
+              {% if active_tag == t %}bg-emerald-700 text-emerald-100{% else %}bg-gray-800 text-emerald-400 hover:bg-gray-700{% endif %}">
+      #{{ t }}
+    </a>
+  {% endfor %}
+  {% if active_tag %}
+    <a href="/?{% if q %}q={{ q }}{% endif %}{% if active_cat %}&cat={{ active_cat | urlencode }}{% endif %}"
+       class="px-2 py-0.5 rounded text-xs font-mono bg-gray-800 text-gray-500 hover:bg-gray-700 transition-colors">
+      ✕ clear tag
+    </a>
+  {% endif %}
 </div>
 {% endif %}
 
@@ -90,6 +109,18 @@
           <p class="text-gray-400 text-xs leading-relaxed line-clamp-3">
             {{ entry.notes[:200] }}{% if entry.notes | length > 200 %}…{% endif %}
           </p>
+        {% endif %}
+
+        {# Tag pills #}
+        {% if entry.tags %}
+          <div class="flex flex-wrap gap-1">
+            {% for t in entry.tags.split() %}
+              <a href="/?tag={{ t | urlencode }}"
+                 class="text-xs font-mono px-1.5 py-0.5 rounded bg-gray-800 text-emerald-400 hover:bg-gray-700 transition-colors">
+                #{{ t }}
+              </a>
+            {% endfor %}
+          </div>
         {% endif %}
 
         {# Footer: source + date + delete #}
