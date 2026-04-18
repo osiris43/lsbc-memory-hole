@@ -122,10 +122,46 @@ Visit `https://archive.yourdomain.com` — you should see the app. Ctrl-C to sto
 
 ```bash
 sudo cloudflared service install
-sudo launchctl start com.cloudflare.cloudflared
 ```
 
-The service reads `~/.cloudflared/config.yml` and starts on login.
+This installs `/Library/LaunchDaemons/com.cloudflare.cloudflared.plist`, but the generated plist doesn't include the right arguments. Edit it:
+
+```bash
+sudo nano /Library/LaunchDaemons/com.cloudflare.cloudflared.plist
+```
+
+Replace the `ProgramArguments` array with:
+
+```xml
+<key>ProgramArguments</key>
+<array>
+    <string>/opt/homebrew/bin/cloudflared</string>
+    <string>--config</string>
+    <string>/var/root/.cloudflared/config.yml</string>
+    <string>tunnel</string>
+    <string>run</string>
+    <string>slack-archive</string>
+</array>
+```
+
+Copy your credentials into root's home so the daemon can find them:
+
+```bash
+sudo mkdir -p /var/root/.cloudflared
+sudo cp ~/.cloudflared/config.yml /var/root/.cloudflared/
+sudo cp ~/.cloudflared/<YOUR-TUNNEL-UUID>.json /var/root/.cloudflared/
+sudo cp ~/.cloudflared/cert.pem /var/root/.cloudflared/
+```
+
+Edit `/var/root/.cloudflared/config.yml` and update `credentials-file` to point to `/var/root/.cloudflared/<YOUR-TUNNEL-UUID>.json`.
+
+Then load the service:
+
+```bash
+sudo launchctl unload /Library/LaunchDaemons/com.cloudflare.cloudflared.plist
+sudo launchctl load /Library/LaunchDaemons/com.cloudflare.cloudflared.plist
+sudo launchctl list | grep cloudflared  # should show a PID
+```
 
 ---
 
