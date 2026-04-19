@@ -4,6 +4,54 @@ A lightweight personal web app for archiving noteworthy content from Slack — A
 
 ---
 
+## Slack app integration
+
+A message shortcut ("Archive message") lets anyone in the workspace archive a message directly from Slack without touching the web UI.
+
+### What it does
+
+1. Right-click any Slack message → **More message shortcuts** → **Archive message**
+2. A modal opens with a preview of the message, a category dropdown (populated from your existing categories), and an optional tags field
+3. On submit, the message is archived and you get a confirmation DM
+
+### Setup at api.slack.com/apps
+
+1. Create a new Slack app → **From scratch**
+2. **OAuth & Permissions** → Bot Token Scopes: `chat:write`, `channels:history`, `groups:history`, `im:write`
+3. **Interactivity & Shortcuts** → turn on Interactivity → Request URL: `https://lsbc-memory-hole.com/slack/events`
+4. Same page → **Shortcuts** → **Create New Shortcut** → **On messages** → Name: `Archive message` → Callback ID: `archive_message`
+5. Install the app to your workspace → copy the **Bot User OAuth Token**
+6. **Basic Information** → copy the **Signing Secret**
+
+### Environment variables
+
+Copy `.env.example` to `.env` and fill in the values:
+
+```bash
+cp .env.example .env
+```
+
+```
+SLACK_BOT_TOKEN=xoxb-...
+SLACK_SIGNING_SECRET=...
+```
+
+The app reads these on startup via `python-dotenv`. Restart gunicorn after editing `.env`.
+
+### New columns added to the DB
+
+Three columns are added automatically via migration on first run with the new code:
+
+| column | stores |
+|---|---|
+| `slack_message_ts` | Slack message timestamp |
+| `slack_channel_id` | Channel the message came from |
+| `slack_author_id` | Slack user ID of the original message author |
+
+The submitting user's Slack ID is stored in the existing `source` column.
+
+---
+
 ## Running the app
 
 ```bash

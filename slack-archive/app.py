@@ -1,13 +1,25 @@
 import sqlite3
 import os
 import re
+import json
+import logging
 from flask import Flask, render_template, request, redirect, url_for, g
 from datetime import datetime, timezone
+from dotenv import load_dotenv
+
+load_dotenv()
 
 DATABASE = os.path.join(os.path.dirname(__file__), 'archive.db')
+SLACK_BOT_TOKEN = os.environ.get('SLACK_BOT_TOKEN')
+SLACK_SIGNING_SECRET = os.environ.get('SLACK_SIGNING_SECRET')
+
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
+# ---------------------------------------------------------------------------
+# DB helpers
+# ---------------------------------------------------------------------------
 
 def get_db():
     if 'db' not in g:
@@ -39,22 +51,25 @@ def init_db():
     db = get_db()
     db.execute("""
         CREATE TABLE IF NOT EXISTS entries (
-            id           INTEGER PRIMARY KEY AUTOINCREMENT,
-            title        TEXT NOT NULL,
-            url          TEXT,
-            notes        TEXT,
-            category     TEXT,
-            source       TEXT,
-            saved_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
-            content_date TEXT,
-            tags         TEXT
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            title             TEXT NOT NULL,
+            url               TEXT,
+            notes             TEXT,
+            category          TEXT,
+            source            TEXT,
+            saved_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+            content_date      TEXT,
+            tags              TEXT,
+            slack_message_ts  TEXT,
+            slack_channel_id  TEXT,
+            slack_author_id   TEXT
         )
     """)
-    # Safe migration for databases created before the tags column existed
-    try:
-        db.execute("ALTER TABLE entries ADD COLUMN tags TEXT")
-    except sqlite3.OperationalError:
-        pass
+    for col in ('tags', 'slack_message_ts', 'slack_channel_id', 'slack_author_id'):
+        try:
+            db.execute(f"ALTER TABLE entries ADD COLUMN {col} TEXT")
+        except sqlite3.OperationalError:
+            pass
     db.commit()
 
 
@@ -62,6 +77,36 @@ def init_db():
 def before_request():
     init_db()
 
+
+def get_categories():
+    return [
+        row[0] for row in
+        get_db().execute(
+            "SELECT DISTINCT category FROM entries "
+            "WHERE category IS NOT NULL AND category != '' ORDER BY category"
+        ).fetchall()
+    ]
+
+
+def create_entry(*, title, url=None, notes=None, category=None, source=None,
+                 content_date=None, tags=None,
+                 slack_message_ts=None, slack_channel_id=None, slack_author_id=None):
+    """Insert one entry and commit. Must be called within a Flask app context."""
+    db = get_db()
+    db.execute(
+        """INSERT INTO entries
+           (title, url, notes, category, source, content_date, tags,
+            slack_message_ts, slack_channel_id, slack_author_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (title, url, notes, category, source, content_date, tags,
+         slack_message_ts, slack_channel_id, slack_author_id),
+    )
+    db.commit()
+
+
+# ---------------------------------------------------------------------------
+# Web routes
+# ---------------------------------------------------------------------------
 
 @app.route('/')
 def index():
@@ -83,7 +128,6 @@ def index():
         params.append(cat)
 
     if tag:
-        # pad both sides so we match whole words: ' ai ' won't match ' aitools '
         conditions.append("(' ' || COALESCE(tags, '') || ' ') LIKE ?")
         params.append(f'% {tag} %')
 
@@ -93,14 +137,11 @@ def index():
     query += " ORDER BY saved_at DESC"
 
     entries = db.execute(query, params).fetchall()
+    categories = get_categories()
 
-    categories = [
-        row[0] for row in
-        db.execute("SELECT DISTINCT category FROM entries WHERE category IS NOT NULL AND category != '' ORDER BY category").fetchall()
-    ]
-
-    # Collect all distinct tags across all entries for the tag cloud
-    all_tags_raw = db.execute("SELECT tags FROM entries WHERE tags IS NOT NULL AND tags != ''").fetchall()
+    all_tags_raw = db.execute(
+        "SELECT tags FROM entries WHERE tags IS NOT NULL AND tags != ''"
+    ).fetchall()
     tag_counts: dict = {}
     for row in all_tags_raw:
         for t in row[0].split():
@@ -113,40 +154,25 @@ def index():
 
 @app.route('/add', methods=['GET', 'POST'])
 def add():
-    db = get_db()
-
     if request.method == 'POST':
         title = request.form.get('title', '').strip()
         if not title:
-            categories = [
-                row[0] for row in
-                db.execute("SELECT DISTINCT category FROM entries WHERE category IS NOT NULL AND category != '' ORDER BY category").fetchall()
-            ]
-            return render_template('add.html', categories=categories, error="Title is required.", form=request.form)
+            return render_template('add.html', categories=get_categories(),
+                                   error="Title is required.", form=request.form)
 
         raw_tags = request.form.get('tags', '').strip()
-        tags = parse_tags(raw_tags) if raw_tags else None
-
-        db.execute(
-            "INSERT INTO entries (title, url, notes, category, source, content_date, tags) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (
-                title,
-                request.form.get('url', '').strip() or None,
-                request.form.get('notes', '').strip() or None,
-                request.form.get('category', '').strip() or None,
-                request.form.get('source', '').strip() or None,
-                request.form.get('content_date', '').strip() or None,
-                tags,
-            )
+        create_entry(
+            title=title,
+            url=request.form.get('url', '').strip() or None,
+            notes=request.form.get('notes', '').strip() or None,
+            category=request.form.get('category', '').strip() or None,
+            source=request.form.get('source', '').strip() or None,
+            content_date=request.form.get('content_date', '').strip() or None,
+            tags=parse_tags(raw_tags) if raw_tags else None,
         )
-        db.commit()
         return redirect(url_for('index'))
 
-    categories = [
-        row[0] for row in
-        db.execute("SELECT DISTINCT category FROM entries WHERE category IS NOT NULL AND category != '' ORDER BY category").fetchall()
-    ]
-    return render_template('add.html', categories=categories, error=None, form={})
+    return render_template('add.html', categories=get_categories(), error=None, form={})
 
 
 @app.route('/delete/<int:entry_id>', methods=['POST'])
@@ -155,6 +181,153 @@ def delete(entry_id):
     db.execute("DELETE FROM entries WHERE id = ?", (entry_id,))
     db.commit()
     return redirect(url_for('index'))
+
+
+# ---------------------------------------------------------------------------
+# Slack integration (only wired up when env vars are present)
+# ---------------------------------------------------------------------------
+
+_DEFAULT_CATEGORIES = ['AI', 'Food', 'General', 'Other']
+
+if SLACK_BOT_TOKEN and SLACK_SIGNING_SECRET:
+    from slack_bolt import App as BoltApp
+    from slack_bolt.adapter.flask import SlackRequestHandler
+
+    bolt_app = BoltApp(token=SLACK_BOT_TOKEN, signing_secret=SLACK_SIGNING_SECRET)
+    slack_handler = SlackRequestHandler(bolt_app)
+
+    def _category_options():
+        """Return Block Kit option objects for the category dropdown."""
+        with app.app_context():
+            cats = get_categories() or _DEFAULT_CATEGORIES
+        return [
+            {"text": {"type": "plain_text", "text": c}, "value": c}
+            for c in cats
+        ]
+
+    @bolt_app.shortcut("archive_message")
+    def handle_shortcut(shortcut, ack, client):
+        ack()
+        message = shortcut['message']
+        raw_text = message.get('text', '')
+        preview = raw_text[:500] + ('…' if len(raw_text) > 500 else '')
+        channel_id = shortcut['channel']['id']
+
+        meta = json.dumps({
+            "channel_id": channel_id,
+            "message_ts": message.get('ts', ''),
+            "author_id": message.get('user', ''),
+            "fallback_text": raw_text[:500],
+        })
+
+        client.views_open(
+            trigger_id=shortcut['trigger_id'],
+            view={
+                "type": "modal",
+                "callback_id": "archive_submit",
+                "private_metadata": meta,
+                "title": {"type": "plain_text", "text": "Archive Message"},
+                "submit": {"type": "plain_text", "text": "Archive"},
+                "close": {"type": "plain_text", "text": "Cancel"},
+                "blocks": [
+                    {
+                        "type": "section",
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": f"*Message preview:*\n{preview}",
+                        },
+                    },
+                    {
+                        "type": "input",
+                        "block_id": "category_block",
+                        "label": {"type": "plain_text", "text": "Category"},
+                        "element": {
+                            "type": "static_select",
+                            "action_id": "category",
+                            "placeholder": {"type": "plain_text", "text": "Select a category"},
+                            "options": _category_options(),
+                        },
+                    },
+                    {
+                        "type": "input",
+                        "block_id": "tags_block",
+                        "optional": True,
+                        "label": {"type": "plain_text", "text": "Tags"},
+                        "element": {
+                            "type": "plain_text_input",
+                            "action_id": "tags",
+                            "placeholder": {"type": "plain_text", "text": "#ai, food, #funny"},
+                        },
+                    },
+                ],
+            },
+        )
+
+    @bolt_app.view("archive_submit")
+    def handle_submission(ack, body, client, view):
+        meta = json.loads(view['private_metadata'])
+        channel_id = meta['channel_id']
+        message_ts = meta['message_ts']
+        author_id = meta['author_id']
+        fallback_text = meta['fallback_text']
+
+        values = view['state']['values']
+        category = values['category_block']['category']['selected_option']['value']
+        raw_tags = (values['tags_block']['tags'].get('value') or '').strip()
+        tags = parse_tags(raw_tags) if raw_tags else None
+        submitting_user = body['user']['id']
+
+        # Fetch authoritative message text; fall back to shortcut payload on error
+        try:
+            result = client.conversations_history(
+                channel=channel_id, latest=message_ts, inclusive=True, limit=1
+            )
+            messages = result.get('messages', [])
+            full_text = messages[0].get('text', fallback_text) if messages else fallback_text
+        except Exception as e:
+            logger.warning("conversations_history failed, using fallback text: %s", e)
+            full_text = fallback_text
+
+        title = full_text[:200]
+        notes = full_text if len(full_text) > 200 else None
+
+        try:
+            with app.app_context():
+                create_entry(
+                    title=title,
+                    notes=notes,
+                    category=category,
+                    source=submitting_user,
+                    tags=tags,
+                    slack_message_ts=message_ts,
+                    slack_channel_id=channel_id,
+                    slack_author_id=author_id,
+                )
+        except Exception as e:
+            logger.exception("Failed to archive Slack entry")
+            ack(response_action="errors",
+                errors={"category_block": f"Archive failed: {e}"})
+            return
+
+        ack()
+
+        tag_str = f"  |  tags: {raw_tags}" if raw_tags else ""
+        try:
+            client.chat_postMessage(
+                channel=submitting_user,
+                text=f"Archived! Category: *{category}*{tag_str}",
+            )
+        except Exception as e:
+            logger.warning("Failed to send confirmation DM: %s", e)
+
+    @app.route('/slack/events', methods=['POST'])
+    def slack_events():
+        return slack_handler.handle(request)
+
+else:
+    logger.info(
+        "SLACK_BOT_TOKEN or SLACK_SIGNING_SECRET not set — Slack integration disabled."
+    )
 
 
 if __name__ == '__main__':

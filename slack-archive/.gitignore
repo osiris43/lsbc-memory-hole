@@ -3,3 +3,4 @@ archive.db.bak
 .venv/
 __pycache__/
 *.pyc
+.env

@@ -1,2 +1,4 @@
 flask
 gunicorn
+slack-bolt
+python-dotenv
