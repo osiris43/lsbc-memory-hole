@@ -240,12 +240,26 @@ if SLACK_BOT_TOKEN and SLACK_SIGNING_SECRET:
                     {
                         "type": "input",
                         "block_id": "category_block",
+                        "optional": True,
                         "label": {"type": "plain_text", "text": "Category"},
+                        "hint": {"type": "plain_text", "text": "Pick an existing category, or leave blank and type a new one below."},
                         "element": {
                             "type": "static_select",
                             "action_id": "category",
                             "placeholder": {"type": "plain_text", "text": "Select a category"},
                             "options": _category_options(),
+                        },
+                    },
+                    {
+                        "type": "input",
+                        "block_id": "new_category_block",
+                        "optional": True,
+                        "label": {"type": "plain_text", "text": "New category"},
+                        "hint": {"type": "plain_text", "text": "Type here to create a new category. Overrides the dropdown above."},
+                        "element": {
+                            "type": "plain_text_input",
+                            "action_id": "new_category",
+                            "placeholder": {"type": "plain_text", "text": "e.g. Politics"},
                         },
                     },
                     {
@@ -272,7 +286,14 @@ if SLACK_BOT_TOKEN and SLACK_SIGNING_SECRET:
         fallback_text = meta['fallback_text']
 
         values = view['state']['values']
-        category = values['category_block']['category']['selected_option']['value']
+        new_cat = (values['new_category_block']['new_category'].get('value') or '').strip()
+        existing_cat = (values['category_block']['category'].get('selected_option') or {}).get('value', '')
+        category = new_cat or existing_cat or None
+        if not category:
+            ack(response_action="errors",
+                errors={"new_category_block": "Please select an existing category or type a new one."})
+            return
+
         raw_tags = (values['tags_block']['tags'].get('value') or '').strip()
         tags = parse_tags(raw_tags) if raw_tags else None
         submitting_user = body['user']['id']
