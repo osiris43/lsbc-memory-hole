@@ -205,7 +205,7 @@ if SLACK_BOT_TOKEN and SLACK_SIGNING_SECRET:
             for c in cats
         ]
 
-    @bolt_app.shortcut("archive_message")
+    @bolt_app.shortcut("memory_hole_message")
     def handle_shortcut(shortcut, ack, client):
         ack()
         message = shortcut['message']
