@@ -233,6 +233,92 @@ sudo launchctl list | grep cloudflared  # should show a PID
 
 ---
 
+## Service architecture
+
+The app runs as two separate launchd services on the Mac Mini. Understanding the difference matters for headless operation.
+
+| | cloudflared | slack-archive (gunicorn) |
+|---|---|---|
+| plist location | `/Library/LaunchDaemons/` | `~/Library/LaunchAgents/` |
+| Runs as | root | your user account |
+| Starts at | system boot | GUI login |
+| Installed by | `sudo cloudflared service install` | manual |
+
+**LaunchDaemons** start at boot regardless of who (if anyone) is logged in.  
+**LaunchAgents** only start when the owning user has an active GUI session — SSH does not count.
+
+### Headless Mac Mini caveat
+
+If the Mac Mini reboots without auto-login enabled, cloudflared comes back up automatically but gunicorn does not — the site will be down until someone physically logs into the desktop.
+
+Check whether auto-login is configured:
+
+```bash
+defaults read /Library/Preferences/com.apple.loginwindow autoLoginUser 2>/dev/null || echo "auto-login not set"
+```
+
+Note: FileVault disables auto-login. Check with `fdesetup status`.
+
+### Option: run gunicorn as a LaunchDaemon (survives headless reboots)
+
+This requires gunicorn to run as root (or a dedicated user). The simplest approach is root.
+
+1. Copy the plist to the system location:
+
+```bash
+sudo cp ~/Library/LaunchAgents/com.slackarchive.plist /Library/LaunchDaemons/com.slackarchive.plist
+sudo launchctl unload ~/Library/LaunchAgents/com.slackarchive.plist
+```
+
+2. Edit the system plist to add log paths (optional but recommended):
+
+```bash
+sudo nano /Library/LaunchDaemons/com.slackarchive.plist
+```
+
+Add before `</dict>`:
+
+```xml
+<key>StandardOutPath</key>
+<string>/Library/Logs/com.slackarchive.out.log</string>
+<key>StandardErrorPath</key>
+<string>/Library/Logs/com.slackarchive.err.log</string>
+```
+
+3. Load it:
+
+```bash
+sudo launchctl load /Library/LaunchDaemons/com.slackarchive.plist
+```
+
+The `make restart` / `make logs` targets in the Makefile would need updating to use `sudo` and the new paths if you switch.
+
+---
+
+## Logs
+
+| service | log location |
+|---|---|
+| gunicorn stdout | `~/Library/Logs/com.slackarchive.out.log` |
+| gunicorn stderr | `~/Library/Logs/com.slackarchive.err.log` |
+| cloudflared stdout | `/Library/Logs/com.cloudflare.cloudflared.out.log` |
+| cloudflared stderr | `/Library/Logs/com.cloudflare.cloudflared.err.log` |
+
+Tail gunicorn errors (also available via `make logs`):
+
+```bash
+tail -f ~/Library/Logs/com.slackarchive.err.log
+```
+
+Check service status:
+
+```bash
+launchctl list | grep slackarchive       # gunicorn — PID in first column = running
+sudo launchctl list | grep cloudflared   # cloudflared — PID in first column = running
+```
+
+---
+
 ## Access model
 
 | | Cloudflare tunnel | Tailscale |
