@@ -165,6 +165,26 @@ sudo launchctl list | grep cloudflared  # should show a PID
 
 ---
 
+## Rotating the Cloudflare tunnel token
+
+If you rotate the token in the Cloudflare dashboard, the credentials file on disk becomes invalid and the tunnel will fail to connect. Update both copies with the new credentials:
+
+```bash
+cloudflared tunnel token slack-archive | python3 -c "import sys,base64,json; token=sys.stdin.read().strip(); data=json.loads(base64.urlsafe_b64decode(token+'==')); secret=base64.b64encode(base64.urlsafe_b64decode(data['s']+'==')).decode(); print(json.dumps({'AccountTag':data['a'],'TunnelSecret':secret,'TunnelID':data['t'],'Endpoint':''}))" | tee ~/.cloudflared/afe65215-808c-47bd-8cff-d115eb3c2fa1.json | sudo tee /var/root/.cloudflared/afe65215-808c-47bd-8cff-d115eb3c2fa1.json
+```
+
+Then reload the daemon:
+
+```bash
+sudo launchctl unload /Library/LaunchDaemons/com.cloudflare.cloudflared.plist
+sudo launchctl load /Library/LaunchDaemons/com.cloudflare.cloudflared.plist
+sudo launchctl list | grep cloudflared  # should show a PID
+```
+
+**Important:** the credentials file must use long-form keys (`AccountTag`, `TunnelSecret`, `TunnelID`, `Endpoint`) — the short-form keys (`a`, `s`, `t`) from the raw decoded token will not work.
+
+---
+
 ## Access model
 
 | | Cloudflare tunnel | Tailscale |
