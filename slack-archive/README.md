@@ -53,6 +53,20 @@ The submitting user's Slack ID is stored in the existing `source` column.
 
 ---
 
+## Makefile
+
+Run these from the `slack-archive/` directory:
+
+| command | action |
+|---|---|
+| `make restart` | Unload and reload the gunicorn LaunchAgent |
+| `make start` | Load the LaunchAgent (start gunicorn) |
+| `make stop` | Unload the LaunchAgent (stop gunicorn) |
+| `make logs` | Tail the gunicorn error log |
+| `make install` | Install dependencies into the venv |
+
+---
+
 ## Running the app
 
 ```bash
