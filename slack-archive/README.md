@@ -18,7 +18,8 @@ A message shortcut ("Archive message") lets anyone in the workspace archive a me
 
 1. Create a new Slack app → **From scratch**
 2. **OAuth & Permissions** → Bot Token Scopes: `chat:write`, `channels:history`, `groups:history`, `im:write`
-3. **Interactivity & Shortcuts** → turn on Interactivity → Request URL: `https://lsbc-memory-hole.com/slack/events`
+3. **Interactivity & Shortcuts** → turn on Interactivity → Request URL: `https://yourwebsite.com/slack/events`
+
 4. Same page → **Shortcuts** → **Create New Shortcut** → **On messages** → Name: `Archive message` → Callback ID: `archive_message`
 5. Install the app to your workspace → copy the **Bot User OAuth Token**
 6. **Basic Information** → copy the **Signing Secret**

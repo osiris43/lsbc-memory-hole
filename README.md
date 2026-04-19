@@ -1,6 +1,6 @@
 # lsbc-memory-hole
 
-A personal toolbox of small web apps hosted on a Mac Mini, served publicly via Cloudflare tunnel at `lsbc-memory-hole.com` and privately via Tailscale. Each app lives in its own subdirectory and is self-contained — no shared infrastructure, no monorepo build system.
+A personal toolbox of small web apps for slack integrations. Each app lives in its own subdirectory and is self-contained — no shared infrastructure, no monorepo build system.
 
 ## Apps
 
